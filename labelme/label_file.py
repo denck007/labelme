@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os.path as osp
+import datetime
 
 import PIL.Image
 
@@ -160,6 +161,7 @@ class LabelFile(object):
             imageData=imageData,
             imageHeight=imageHeight,
             imageWidth=imageWidth,
+            added_on=datetime.datetime.utcnow().isoformat()
         )
         for key, value in otherData.items():
             data[key] = value

@@ -119,6 +119,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_dock.setObjectName(u'Label List')
         self.label_dock.setWidget(self.uniqLabelList)
 
+        self.hitListWidget = QtWidgets.QListWidget()
+        self.hitListWidget.itemSelectionChanged.connect(
+            self.hitSelectionChanged
+        )
+
+        hitListLayout = QtWidgets.QVBoxLayout()
+        hitListLayout.setContentsMargins(0, 0, 0, 0)
+        hitListLayout.setSpacing(0)
+        hitListLayout.addWidget(self.hitListWidget)
+        self.hit_dock = QtWidgets.QDockWidget(u'Hit List', self)
+        self.hit_dock.setObjectName(u'Hits')
+        hitListWidget = QtWidgets.QWidget()
+        hitListWidget.setLayout(hitListLayout)
+        self.hit_dock.setWidget(hitListWidget)
+
         self.fileSearch = QtWidgets.QLineEdit()
         self.fileSearch.setPlaceholderText('Search Filename')
         self.fileSearch.textChanged.connect(self.fileSearchChanged)
@@ -153,6 +168,10 @@ class MainWindow(QtWidgets.QMainWindow):
             Qt.Horizontal: scrollArea.horizontalScrollBar(),
         }
         self.canvas.scrollRequest.connect(self.scrollRequest)
+        QtWidgets.QShortcut(QtGui.QKeySequence('w'), self, self.scrollUp)
+        QtWidgets.QShortcut(QtGui.QKeySequence('s'), self, self.scrollDown)
+        QtWidgets.QShortcut(QtGui.QKeySequence('a'), self, self.scrollLeft)
+        QtWidgets.QShortcut(QtGui.QKeySequence('d'), self, self.scrollRight)
 
         self.canvas.newShape.connect(self.newShape)
         self.canvas.shapeMoved.connect(self.setDirty)
@@ -162,7 +181,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(scrollArea)
 
         features = QtWidgets.QDockWidget.DockWidgetFeatures()
-        for dock in ['flag_dock', 'label_dock', 'shape_dock', 'file_dock']:
+        for dock in ['hit_dock','flag_dock', 'label_dock', 'shape_dock', 'file_dock']:
             if self._config[dock]['closable']:
                 features = features | QtWidgets.QDockWidget.DockWidgetClosable
             if self._config[dock]['floatable']:
@@ -173,20 +192,28 @@ class MainWindow(QtWidgets.QMainWindow):
             if self._config[dock]['show'] is False:
                 getattr(self, dock).setVisible(False)
 
+        self.addDockWidget(Qt.RightDockWidgetArea, self.hit_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.flag_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.label_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
-
+        
         # Actions
         action = functools.partial(utils.newAction, self)
         shortcuts = self._config['shortcuts']
+
+        # Loram specific
+        getNewImages = action('Get unlabeled images from server',self.getNewImagesFromServer,tip="Download the images for the next uncompleted hits")
+        pushLabels = action('Push labels in cache to server',self.pushLabelsToServer,tip="Upload any labels to server that are not already there")
+
+        # Generic
         quit = action('&Quit', self.close, shortcuts['quit'], 'quit',
                       'Quit application')
         open_ = action('&Open', self.openFile, shortcuts['open'], 'open',
                        'Open image or label file')
-        opendir = action('&Open Dir', self.openDirDialog,
-                         shortcuts['open_dir'], 'open', u'Open Dir')
+        opendir = action('&Open Root Dir', self.openDirDialog,
+                         shortcuts['open_dir'], 'open', u'Open Root Dir')
+                         
         openNextImg = action(
             '&Next Image',
             self.openNextImg,
@@ -488,6 +515,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menus = utils.struct(
             file=self.menu('&File'),
             edit=self.menu('&Edit'),
+            server=self.menu('&Server'),
             view=self.menu('&View'),
             help=self.menu('&Help'),
             recentFiles=QtWidgets.QMenu('Open &Recent'),
@@ -510,6 +538,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 deleteFile,
                 None,
                 quit,
+            ),
+        )
+        utils.addActions(
+            self.menus.server,
+            (
+                getNewImages,
+                pushLabels
             ),
         )
         utils.addActions(self.menus.help, (help,))
@@ -638,6 +673,24 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
+
+
+    def hitSelectionChanged(self):
+        '''
+        '''
+        pass
+
+    def getNewImagesFromServer(self):
+        '''
+        Download images for the next hits
+        '''
+        print("in getNewImagesFromServer")
+
+    def pushLabelsToServer(self):
+        '''
+        Push all of the data in the cache to the server if it is not already there
+        '''
+        print("in pushToServer")
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
@@ -1121,6 +1174,18 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.undoLastLine()
             self.canvas.shapesBackups.pop()
 
+    def scrollUp(self):
+        self.scrollRequest(400,2)
+
+    def scrollDown(self):
+        self.scrollRequest(-400,2)
+
+    def scrollLeft(self):
+        self.scrollRequest(180,1)
+
+    def scrollRight(self):
+        self.scrollRequest(-180,1)
+
     def scrollRequest(self, delta, orientation):
         units = - delta * 0.1  # natural scroll
         bar = self.scrollBars[orientation]
@@ -1137,9 +1202,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def zoomRequest(self, delta, pos):
         canvas_width_old = self.canvas.width()
-        units = 1.1
+        units = 1.2
         if delta < 0:
-            units = 0.9
+            units = 0.8
         self.addZoom(units)
 
         canvas_width_new = self.canvas.width()
@@ -1249,7 +1314,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.loadShapes(prev_shapes, replace=False)
         self.setClean()
         self.canvas.setEnabled(True)
-        self.adjustScale(initial=True)
+        #self.adjustScale(initial=True) # Keep the zoom level the same when going to next image
         self.paintCanvas()
         self.addRecentFile(self.filename)
         self.toggleActions(True)
