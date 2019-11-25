@@ -1,3 +1,6 @@
+# This is a fork of the main LabelMe repo. It is not intended to ever be merged back into the origin.
+##  Modifications are made to handle a very specific workflow
+
 <h1 align="center">
   <img src="labelme/icons/icon.png"><br/>labelme
 </h1>
