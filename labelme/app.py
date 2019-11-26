@@ -1306,12 +1306,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas.loadPixmap(QtGui.QPixmap.fromImage(image))
         if self._config['flags']:
             self.loadFlags({k: False for k in self._config['flags']})
-        if self.labelFile:
+        if self.labelFile: # Load the existing label file, self.labelFile is None if it does not exist
             self.loadLabels(self.labelFile.shapes)
             if self.labelFile.flags is not None:
                 self.loadFlags(self.labelFile.flags)
+        # if there are no labels on the image (len(labelList.shapes) == 0),
+        #   and keep_prev, then load the previous labels in
         if self._config['keep_prev'] and not self.labelList.shapes:
             self.loadShapes(prev_shapes, replace=False)
+            if self._config['auto_detect_edges_from_previous']:
+                print("Adjusting previous label to match current image")
+                for shape in self.labelList.shapes:
+                    if shape.label == self._config['auto_detect_edges_from_previous_label']:
+                        try:
+                            shape.points = utils.move_box_to_close_edges(image,shape.points)
+                        except:
+                            print("Not able to adjust the bounding box!")
+
         self.setClean()
         self.canvas.setEnabled(True)
         #self.adjustScale(initial=True) # Keep the zoom level the same when going to next image

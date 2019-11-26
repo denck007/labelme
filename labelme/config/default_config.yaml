@@ -1,5 +1,11 @@
 cache_dir: ~/railedge
 
+# If keep_prev is true, will adjust the 'edge' box slightly to match up with
+#   the new image
+auto_detect_edges_from_previous: false
+auto_detect_edges_from_previous_label: edge # name of the label to edit
+auto_detect_edges_from_previous_min_overlap: .999 # IoU of the modified label to previous label
+
 auto_save: true
 display_label_popup: true
 instance_label_auto_increment: true

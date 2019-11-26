@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "labelme",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/labelme/main.py",
+            "args": [
+                "C:\\Users\\neil\\railedge_cache\\images\\hit_13721",
+                "--config","labelme\\config\\default_config.yaml",
+                "--output","C:\\Users\\neil\\railedge_cache\\labels_railedge\\hit_13721"
+            ],
+        },
+    ]
+}
