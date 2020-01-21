@@ -27,5 +27,3 @@ from .qt import struct
 from .qt import distance
 from .qt import distancetoline
 from .qt import fmtShortcut
-
-from .project_specific import move_box_to_close_edges
