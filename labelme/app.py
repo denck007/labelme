@@ -1,6 +1,7 @@
 import functools
 import os
 import os.path as osp
+import sys
 import re
 import webbrowser
 
@@ -204,8 +205,9 @@ class MainWindow(QtWidgets.QMainWindow):
         shortcuts = self._config['shortcuts']
 
         # Loram specific
-        getNewImages = action('Get unlabeled images from server',self.getNewImagesFromServer,tip="Download the images for the next uncompleted hits")
-        pushLabels = action('Push labels in cache to server',self.pushLabelsToServer,tip="Upload any labels to server that are not already there")
+        server_login = action('Login to the server',self.server_Login,tip='Login to the server using the credentials stored in the config file')
+        server_getNewImages = action('Get unlabeled images from server',self.server_GetNewImages,tip="Download the images for the next uncompleted hits",enabled=False)
+        server_pushLabels = action('Push labels in cache to server',self.server_PushLabels,tip="Upload any labels to server that are not already there",enabled=False)
 
         # Generic
         quit = action('&Quit', self.close, shortcuts['quit'], 'quit',
@@ -544,8 +546,9 @@ class MainWindow(QtWidgets.QMainWindow):
         utils.addActions(
             self.menus.server,
             (
-                getNewImages,
-                pushLabels
+                server_login,
+                server_getNewImages,
+                server_pushLabels
             ),
         )
         utils.addActions(self.menus.help, (help,))
@@ -681,17 +684,59 @@ class MainWindow(QtWidgets.QMainWindow):
         '''
         pass
 
-    def getNewImagesFromServer(self):
+    def server_Login(self):
+        '''
+        Login to the server
+        '''
+        try:
+            self.imageHandler = utils.ImageHandler(self._config["server"],
+                                                                    self._config["port"],
+                                                                    self._config["username"],
+                                                                    self._config["password"],
+                                                                    self._config["cache"])
+            for item in self.menus.server.actions():
+                item.setEnabled(True)
+            self.status("Successfully logged in!")
+        except:
+            err = sys.exc_info()
+            self.status("Error logging in: {}:{}".format(err[0],err[1]))
+            
+
+    def server_GetNewImages(self):
         '''
         Download images for the next hits
         '''
-        print("in getNewImagesFromServer")
+        self.status("Getting images from server, this may take a few minutes depending on connection speed.")
+        self.imageHandler.get_new_hits(self._config["max_hits_to_cache"])
 
-    def pushLabelsToServer(self):
+        self.openDirDialog(dirpath=self._config["cache"])
+
+    def server_PushLabels(self):
         '''
         Push all of the data in the cache to the server if it is not already there
+
+        1) Get all labels nested into the root directory, filter out json files
+        2) For each file:
+            a) open
+            b) if 'server_response' is in the keys file has already been uploaded, goto next
+            c) convert labelme format to railedge format, add to the file
+            d) submit the label
+            e) Add the server response and railedge_id to file
+            d) Save file
         '''
         print("in pushToServer")
+        fnames = []
+        for root,_,files in os.walk(self._config["cache"]):
+            for fname_short in files:
+                if fname_short[-5:] != ".json":
+                    continue
+                fnames.append(os.path.join(root,fname_short))
+
+        label_count = len(fnames)
+        for idx,fname in enumerate(fnames):
+            self.status("Submitting label {:>5.0f}/{:<5.0f}...".format(idx,label_count))
+            self.imageHandler.submit_label_file(fname)
+        self.status("Finished submitting {:0f} labels to server".format(label_count))
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
@@ -735,6 +780,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def setDirty(self):
         if self._config['auto_save'] or self.actions.saveAuto.isChecked():
             label_file = osp.splitext(self.imagePath)[0] + '.json'
+            #images_path, image_name = osp.split(self.imagePath) 
+            #hit_path,_ = osp.split(images_path) 
+            #label_name = image_name.split(".")[0] + ".json" 
+            #label_file = osp.join(hit_path,"labels",label_name) 
+
             if self.output_dir:
                 label_file_without_path = osp.basename(label_file)
                 label_file = osp.join(self.output_dir, label_file_without_path)
@@ -1685,8 +1735,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.mayContinue():
             return
 
-        defaultOpenDirPath = dirpath if dirpath else '.'
-        if self.lastOpenDir and osp.exists(self.lastOpenDir):
+        if dirpath and osp.exists(dirpath):
+            defaultOpenDirPath = dirpath
+        elif self.lastOpenDir and osp.exists(self.lastOpenDir):
             defaultOpenDirPath = self.lastOpenDir
         else:
             defaultOpenDirPath = osp.dirname(self.filename) \

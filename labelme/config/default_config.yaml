@@ -1,4 +1,9 @@
-cache_dir: ~/railedge
+cache: /home/nedenckl/railedge_cache
+server: L10974
+port: 9999
+username: nedenckl
+password: Loram3900!
+max_hits_to_cache: 2
 
 # If keep_prev is true, will adjust the 'edge' box slightly to match up with
 #   the new image
