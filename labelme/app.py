@@ -30,7 +30,7 @@ from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import ZoomWidget
 
-from utils import edge_adjustment
+from .utils import adjust_edges
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -736,7 +736,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for idx,fname in enumerate(fnames):
             self.status("Submitting label {:>5.0f}/{:<5.0f}...".format(idx,label_count))
             self.imageHandler.submit_label_file(fname)
-        self.status("Finished submitting {:0f} labels to server".format(label_count))
+        self.status("Finished submitting {:.0f} labels to server".format(label_count))
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
@@ -1122,15 +1122,20 @@ class MainWindow(QtWidgets.QMainWindow):
             flag = item.checkState() == Qt.Checked
             flags[key] = flag
         try:
+            # this looks like a bug in the original labelme code. This will cause tests to fail 
+            #   as it is getting the relative path from the filename and the self.imagePath
+            #   which ends up being just the filename 
             imagePath = osp.relpath(
                 self.imagePath, osp.dirname(filename))
+
+            #print("In saveLabels: imagePath: {} self.imagePath: {} filename: {} ops.dirname(filename): {}".format(imagePath,self.imagePath,filename,osp.dirname(filename),))
             imageData = self.imageData if self._config['store_data'] else None
             if osp.dirname(filename) and not osp.exists(osp.dirname(filename)):
                 os.makedirs(osp.dirname(filename))
             lf.save(
                 filename=filename,
                 shapes=shapes,
-                imagePath=imagePath,
+                imagePath=self.imagePath,
                 imageData=imageData,
                 imageHeight=self.image.height(),
                 imageWidth=self.image.width(),
@@ -1369,7 +1374,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 for shape in self.labelList.shapes:
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
-                            shape.points = edge_adjustment.adjust_edges(image,shape.points)
+                            shape.points = adjust_edges(image,shape.points)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")

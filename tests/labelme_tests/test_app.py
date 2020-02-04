@@ -60,5 +60,4 @@ def test_MainWindow_annotate_jpg(qtbot):
     shapes = [shape]
     win.loadLabels(shapes)
     win.saveFile()
-
     labelme.testing.assert_labelfile_sanity(output_file)

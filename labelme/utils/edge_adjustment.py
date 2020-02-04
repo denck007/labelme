@@ -269,37 +269,9 @@ def verify_points_order(points):
     return True
 
 def plot_list_points(p):
+    '''
+    Utility used to debug ordering errors
+    '''
     for idx,c in enumerate(['r','g','b']):
         plt.plot([p[idx].x(),p[idx+1].x()],[p[idx].y(),p[idx+1].y()],c)
     plt.show()
-
-def test_verify_points_order():
-    # Start with a simple square and do exhaustive testing
-    points = [Point(x=0 ,y=0),
-              Point(x=10,y=0),
-              Point(x=10,y=10),
-              Point(x=0 ,y=10)]
-    response = verify_points_order(points)
-    assert response == True, 'Case points in correct order failed'
-
-    for idx,p in enumerate(permutations(points)):
-        response = verify_points_order(p)
-        if idx == 0: # first one are in correct order 
-            assert response == True, 'Points are in correct order'
-        else:
-            msg = "idx: {:}".format(idx)
-            for idx2, point in enumerate(p):
-                msg += "\n\tpt{}: ({:6.0f},{:6.0f})".format(idx2,point.x(),point.y())
-            assert response == False, 'Points not in correct order but did not verify_points_order did not return False, points:\n'+msg
-    
-    points = [Point(x=1 ,y=1),
-              Point(x=11,y=0),
-              Point(x=10,y=10),
-              Point(x=0 ,y=10)]
-    response = verify_points_order(points)
-    assert response == True, 'Points not in correct order'
-
-    print("verify_points_order passed")
-
-if __name__ == '__main__':
-    test_verify_points_order()

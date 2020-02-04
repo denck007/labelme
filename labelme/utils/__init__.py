@@ -29,3 +29,4 @@ from .qt import distancetoline
 from .qt import fmtShortcut
 
 from .ImageHandler import ImageHandler
+from .edge_adjustment  import adjust_edges

@@ -200,10 +200,10 @@ class ImageHandler:
                 data["top_left_y"] = float(pts[0][1])
                 data["top_right_x"] = float(pts[1][0])
                 data["top_right_y"] = float(pts[1][1])
-                data["bottom_left_x"] = float(pts[2][0])
-                data["bottom_left_y"] = float(pts[2][1])
-                data["bottom_right_x"] = float(pts[3][0])
-                data["bottom_right_y"] = float(pts[3][1])
+                data["bottom_right_x"] = float(pts[2][0])
+                data["bottom_right_y"] = float(pts[2][1])
+                data["bottom_left_x"] = float(pts[3][0])
+                data["bottom_left_y"] = float(pts[3][1])
                 return data
         return data
 
