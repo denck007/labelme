@@ -14,7 +14,7 @@ auto_detect_edges_from_previous_min_overlap: .999 # IoU of the modified label to
 auto_save: true
 display_label_popup: true
 instance_label_auto_increment: true
-store_data: false
+store_data: true
 keep_prev: true
 logger_level: info
 
