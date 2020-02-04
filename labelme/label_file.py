@@ -151,7 +151,7 @@ class LabelFile(object):
             otherData = {}
         if flags is None:
             flags = {}
-        image_id = int(osp.split(imagePath)[-1].split(".")[0])
+        image_id = osp.split(imagePath)[-1].split(".")[0]
         hit_id = "hit_id was not found" # initialize with an error message
         for item in osp.abspath(filename).split(osp.sep):
             if "hit_" in item:
