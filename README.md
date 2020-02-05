@@ -1,6 +1,13 @@
 # This is a fork of the main LabelMe repo. It is not intended to ever be merged back into the origin.
 ##  Modifications are made to handle a very specific workflow
 
+## Getting Started:
+All commands are run from the top level of `labelme/`
+1) Install requirements: `conda env create -f labelme.yml`
+2) Install: `python install -e .`
+3) Run tests: `pytest -v tests`
+
+
 <h1 align="center">
   <img src="labelme/icons/icon.png"><br/>labelme
 </h1>
