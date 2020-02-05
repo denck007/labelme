@@ -140,8 +140,7 @@ class LabelFile(object):
         lineColor=None,
         fillColor=None,
         otherData=None,
-        flags=None,
-    ):
+        flags=None):
         if imageData is not None:
             imageData = base64.b64encode(imageData).decode('utf-8')
             imageHeight, imageWidth = self._check_image_height_and_width(

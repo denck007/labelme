@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Python: Current File",
             "type": "python",
@@ -17,11 +18,22 @@
             "request": "launch",
             "program": "${workspaceFolder}/labelme/main.py",
             "args": [
-                "/home/nedenckl/railedge_cache/images/hit_13725",
+                //"/home/nedenckl/railedge_cache/images/hit_13725",
+                "/home/nedenckl/railedge_cache",
                 "--config",
                 "labelme/config/default_config.yaml",
-                "--output",
-                "/home/nedenckl/railedge_cache/labels_railedge/hit_13725",
+                //"--output",
+                //"/home/nedenckl/railedge_cache/labels_railedge/hit_13725",
+            ],
+        },
+        {
+            "name": "labelme tests",
+            "type": "python",
+            "request": "launch",
+            "program": "/home/nedenckl/anaconda3/envs/labeler/bin/pytest",//"${workspaceFolder}/labelme/main.py",
+            "args": [
+                "-v",
+                "${workspaceFolder}/test/labelme_tests"
             ],
         },
     ]

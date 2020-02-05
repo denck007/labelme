@@ -11,6 +11,8 @@ from qtpy import QtCore
 import labelme.utils
 from labelme.utils import edge_adjustment
 
+import requests
+
 def test_verify_points_order():
     # Start with a simple square and do exhaustive testing
     points = [QtCore.QPoint(0.0,0.0),
@@ -36,3 +38,20 @@ def test_verify_points_order():
               QtCore.QPoint(0 ,10)]
     response = edge_adjustment.verify_points_order(points)
     assert response == True, 'Points not in correct order'
+
+def test_data_to_sever():
+    '''
+    Check that the data that is sent from the labeling tool is correct when it is sent to the server
+
+
+    This test assumes that a development server is running and is specified in the config file 
+    '''
+
+    config = labelme.config.get_config(config_file="labelme\config\config_unittests.yaml")
+
+    username = config["username"]
+    password = config["password"]
+    server = config["server"]
+    port = config["port"]
+
+    
