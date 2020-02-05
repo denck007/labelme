@@ -47,9 +47,11 @@ class ImageHandler:
         else:
             print("sucessfully logged in")
 
-    def get_new_hits(self,max_number_hits=1):
+    def get_new_hits(self,max_number_hits=1,max_images_downloaded=3):
         '''
         Download the next hits and corresponding images
+        max_images_downloaded: integer specifying how many images to download total over all hits
+            Initially implemented for testing purposes only. Value is tracked as self. _images_downloaded
         '''
         # first get the next hits
         request = "hit_type__hit_type=RailEdge&completed=False"
@@ -57,8 +59,12 @@ class ImageHandler:
         response = self.client.get(url)
         hits = response.json() #these are the hits that are not yet completed
 
+        self._images_downloaded = 0
+        self._max_images_downloaded = max_images_downloaded
         for hit_count,hit in enumerate(hits):
             if hit_count > max_number_hits:
+                break
+            if self._images_downloaded >= self._max_images_downloaded:
                 break
             print("Processing hit {}".format(hit["id"]))
             image_path = os.path.join(self.cache,"hit_{:08.0f}".format(hit["id"]),"images")
@@ -111,6 +117,10 @@ class ImageHandler:
                 raise RuntimeError("Did not get an image {} for hit {}".format(image_id,hit_image["hit"]))
             else:
                 raise RuntimeError("Got more than one image response for image {} for hit {}".format(image_id,hit_image["hit"]))
+            
+            self._images_downloaded += 1
+            if self._images_downloaded > self._max_images_downloaded:
+                return images
 
         return images
 
@@ -145,6 +155,7 @@ class ImageHandler:
         data = self.submit_label(data)
         with open(fname,'w') as fp:
             json.dump(data,fp,indent=2)
+        return data
 
     def submit_label(self,data):
         '''
@@ -224,9 +235,13 @@ class ImageHandler:
                     "bottom_right_x": float,
                     "bottom_right_y": float}
 
-        if type(data["image_id"]) is not int:
+        try:
+            data["image_id"] = int(data["image_id"])
+        except:
             raise TypeError("When submitting a new label, image must be the image id as an integer")
-        if type(data["hit_id"]) is not int:
+        try:
+            data["hit_id"] = int(data["hit_id"])
+        except:
             raise TypeError("When submitting a new label, hit must be the hit id as an integer")
         
         for item in required:
