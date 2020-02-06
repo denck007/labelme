@@ -3,6 +3,7 @@ import os
 import json
 import base64
 import datetime
+from labelme.config import get_config
 
 class ImageHandler:
 
@@ -13,6 +14,7 @@ class ImageHandler:
     def __init__(self,server,port,username,password,cache):
         '''
         '''
+        self.config = get_config()
         self.server = server
         self.port = str(port)
         
@@ -47,12 +49,19 @@ class ImageHandler:
         else:
             print("sucessfully logged in")
 
-    def get_new_hits(self,max_number_hits=1,max_images_downloaded=3):
+    def get_new_hits(self,max_number_hits=None,max_images_downloaded=None):
         '''
         Download the next hits and corresponding images
+        max_number_hits: integer specifying how many hits to download
         max_images_downloaded: integer specifying how many images to download total over all hits
             Initially implemented for testing purposes only. Value is tracked as self. _images_downloaded
         '''
+
+        if max_number_hits is None:
+            max_number_hits = int(self.config['max_hits_to_cache'])
+        if max_images_downloaded is None:
+            max_images_downloaded = int(self.config['max_images_to_cache'])
+
         # first get the next hits
         request = "hit_type__hit_type=RailEdge&completed=False"
         url = "{}?{}&format=json".format(self.url_api_hit,request)

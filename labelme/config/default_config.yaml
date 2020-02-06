@@ -1,15 +1,15 @@
 cache: /home/nedenckl/railedge_cache
-server: L10974
+server: L10349
 port: 9999
 username: nedenckl
 password: Loram3900!
-max_hits_to_cache: 2
+max_hits_to_cache: 5 # do not download more than this many hits
+max_images_to_cache: 1000 # do not download more than than many images
 
 # If keep_prev is true, will adjust the 'edge' box slightly to match up with
 #   the new image
 auto_detect_edges_from_previous: true
 auto_detect_edges_from_previous_label: edge # name of the label to edit
-auto_detect_edges_from_previous_min_overlap: .999 # IoU of the modified label to previous label
 
 auto_save: true
 display_label_popup: true

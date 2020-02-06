@@ -707,7 +707,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Download images for the next hits
         '''
         self.status("Getting images from server, this may take a few minutes depending on connection speed.")
-        self.imageHandler.get_new_hits(self._config["max_hits_to_cache"])
+        self.imageHandler.get_new_hits(max_number_hits=self._config["max_hits_to_cache"],max_images_downloaded=self._config["max_images_to_cache"])
 
         self.openDirDialog(dirpath=self._config["cache"])
 
