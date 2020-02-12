@@ -218,6 +218,290 @@ def process_edge(image,ref_edge,search_width=.05):
         pt2 = QtCore.QPoint(best_edge.x_at_height(ref_edge.pt2.y())+b_box[0][0],ref_edge.pt2.y())
         return Edge(pt1,pt2,image_height,image_width)
 
+#@profile
+def adjust_edges_correlation(image,previous_image,previous_points,max_delta=.015):
+    '''
+    Given the previous image and the points selected on the previous image,
+        adjust the edges for best fit on the new image
+    
+    Uses template matching over the image and RANSAC to determine the best guess for the rail edge 
+        based on patches from the previous image
+
+    image: QImage, Image to predict the edge locations on
+    previous_image: QImage, Image to use as source for template matching
+    previous_points: List of QPoints in clockwise order starting at top left
+                        for the previous image. Used to create the templates 
+                        and limit the search space 
+    max_delta: float [0,1], The max % of image width the updated edge can move across the image width
+                        at the image top and bottom
+    Process for each side of the rail:
+    1) Create N template patchs from previous_image centered on the line defined by
+        previous_points.
+    2) Preform template matching on image using template patches from step 1 over the entire image
+    3) Multilpy the result from matching each template together
+    4) Get x location of best match for each row of pixels
+    5) RANSAC on these locations to get the best fit line that is the rail edge
+    6) Enforce the bounds given by search_width    
+
+    '''
+
+    img = convertQImageToMat(image)
+    prev_img = convertQImageToMat(previous_image)
+    # Error checking on image shapes
+    shape_img = img.shape
+    shape_prev = prev_img.shape
+    if (len(shape_img) == 3) and (len(shape_prev) == 3):
+        height,width,_ = shape_img
+    elif (len(shape_img) == 2) and (len(shape_prev) == 2):
+        height,width,_ = shape_img
+    else:
+        raise TypeError("Invalid image dimensions {} for image and {} for previous_image. These must match!".format(shape_img,shape_prev))
+
+    # Ensure proper dtypes
+    if prev_img.dtype is np.dtype(np.uint8):
+        prev_img = prev_img.astype(np.float32)/255.
+    if img.dtype is np.dtype(np.uint8):
+        img = img.astype(np.float32)/255.
+    
+    if not verify_points_order(previous_points):
+        raise PointsIncorrectOrder("Points are not in correct order, must be clockwise from top left")
+
+    #parameters for bluring image and the patches
+    kernel = (5,5)
+    sigmaX = 2
+
+    img = cv2.GaussianBlur(img,kernel,sigmaX)    
+    prev_edge_left = Edge(previous_points[0],previous_points[3],height,width)
+    edge_left = process_edge_correlation(img,
+                                        prev_img,
+                                        prev_edge_left,
+                                        max_delta=max_delta,
+                                        blur_kernel=(3,3),
+                                        blur_sigma=1,
+                                        padding=8,
+                                        num_per_side=3,
+                                        patch_size=(16,900),
+                                        patch_offset=300,
+                                        side="left")
+    
+    prev_edge_right = Edge(previous_points[1],previous_points[2],height,width)
+    edge_right = process_edge_correlation(img,
+                                        prev_img,
+                                        prev_edge_right,
+                                        max_delta=max_delta,
+                                        blur_kernel=(3,3),
+                                        blur_sigma=1,
+                                        padding=8,
+                                        num_per_side=3,
+                                        patch_size=(8,900),
+                                        patch_offset=-300,
+                                        side="right")
+    
+    points = [edge_left.pt1,edge_right.pt1,edge_right.pt2,edge_left.pt2]
+    return points
+
+#@profile
+def process_edge_correlation(img,
+                                prev_img,
+                                prev_edge,
+                                max_delta=.015,
+                                blur_kernel=(3,3),
+                                blur_sigma=1,
+                                padding=8,
+                                num_per_side=3,
+                                patch_size=(8,600),
+                                patch_offset=0,
+                                side=""):
+    '''
+    Calculate the best estimate of the rail edge using correlation of patches from the
+        previous image
+    img: ndarray shape: (w,h,1) dtype: np.float32, Image to search in
+    prev_img: ndarray shape: (w,h,1) dtype: np.float32, Image to use for templates
+    prev_edge: Edge object, describe the edge in prev_img
+    max_delta: float [0,1], Updates that move the edge by more than this % of the image width
+        (when x location of edge is measured at top and bottom of image) will be rejected
+        and prev_edge is returned
+    blur_kernel: tuple of length 2 of ints, the size of the blur kernel to be used on the patches
+    blur_sigma: integer, the sigma to use in the bluring of the patches
+
+    padding: int, number of pixels to keep template patches from the edge of the image
+            Is used to removed edge effects on the image
+    num_per_side: int, Number of templates to create and match
+    patch_size: tuple of ints (patch_height, patch_width), How tall and wide each template patch is 
+    '''
+    if side != "":
+        side = "-"+side
+
+    # coordinates of patch to be taken from previous image
+    y_top = np.linspace(padding,img.shape[0]-patch_size[0]-padding,num_per_side,dtype=np.int)
+    y_mid = (y_top + patch_size[0]/2).astype(np.int)
+    y_bot = (y_top + patch_size[0]).astype(np.int)
+
+    x_mid = ((y_mid-prev_edge.b)/prev_edge.m+patch_offset).astype(np.int)
+    x_left = (x_mid - patch_size[1]/2).astype(np.int)
+    x_right = (x_mid + patch_size[1]/2).astype(np.int)
+
+    # limit the search area to viable solution locations in the 
+    img_xlim_left = max(0,int(x_left.min() - max_delta*img.shape[1]))
+    img_xlim_right = min(img.shape[1]-1,int(x_right.max() + max_delta*img.shape[0]))
+
+    # for debugging
+    #img_out = img.copy()
+    #img_out = (img_out*255).astype(np.uint8)
+
+    # pre crop the image so it is not done each iteration
+    img_cropped = np.ascontiguousarray(img[:,img_xlim_left:img_xlim_right,:])
+    # create image indicating correlation using all the patches
+    res_total = None
+    for ii in range(num_per_side):
+        patch = prev_img[y_top[ii]:y_bot[ii],x_left[ii]:x_right[ii],:]
+        
+        patch = cv2.GaussianBlur(patch,blur_kernel,blur_sigma)
+        res = cv2.matchTemplate(img_cropped,patch,cv2.TM_CCORR) #TM_CCORR works just as well as TM_SQDIFF, but is 25% faster
+        res = (res-res.min())/(res.max()-res.min())
+        if res_total is None:
+            res_total = res.copy()
+        else:
+            res_total += res
+
+        # Draw on debug image
+        #cv2.rectangle(img_out,(x_left[ii],y_top[ii]),(x_right[ii],y_bot[ii]),(0,0,1),thickness=3)
+
+    
+    # for debugging
+    #res_total = (res_total-res_total.min())/(res_total.max()-res_total.min()) # only need to normalize to save image
+    #cv2.imwrite("/home/nedenckl/labelme/correlation{}.jpeg".format(side),(res_total*255).astype(np.uint8))
+
+    raw_edge = np.zeros((res_total.shape[0],2),dtype=np.float32)
+    raw_edge[:,0] = res_total.argmax(axis=1).flatten()+patch_size[1]/2-patch_offset+img_xlim_left
+    raw_edge[:,1] = np.arange(padding,padding+res_total.shape[0],1)
+
+    # draw the max values on the edge
+    #img_out[raw_edge[:-1,1].astype(np.int),raw_edge[:-1,0].astype(np.int)] = [0,0,255,0]
+    
+
+    eqn_pred, _ = linest_ransac(raw_edge,
+                                n_sample=10,
+                                n_iters=200,
+                                inlier_thresh=1.5,
+                                inlier_ratio_min=.15,
+                                inlier_ratio_max=.95)
+    if eqn_pred is None:
+        print("linest_ransac failed to find a valid solution")
+        #cv2.imwrite("/home/nedenckl/labelme/test_output{}-ransac_failed.jpeg".format(side),img_out)
+        return prev_edge
+
+    y = np.array([prev_edge.pt1.y(), prev_edge.pt2.y()])
+    x = (y-eqn_pred[1])/eqn_pred[0]
+
+    pt1 = QtCore.QPoint(x[0],y[0])
+    pt2 = QtCore.QPoint(x[1],y[1])
+    edge = Edge(pt1,pt2,img.shape[0],img.shape[1])
+
+
+    # for debugging
+    #cv2.line(img_out,
+    #        (int(edge.x_at_height(0)),0),
+    #        (int(edge.x_at_height(1199)),1199),
+    #        (0,255,0),1)
+    #cv2.line(img_out,
+    #        (int(prev_edge.pt1.x()),int(prev_edge.pt1.y())),
+    #        (int(prev_edge.pt2.x()),int(prev_edge.pt2.y())),
+    #        (255,0,0),1)
+    #cv2.imwrite("/home/nedenckl/labelme/test_output{}-success.jpeg".format(side),img_out)
+
+
+
+    # validate 
+    if abs(prev_edge.x_at_height(0) - edge.x_at_height(0)) > img.shape[1]*max_delta:
+        print("Was unable to update edge due to edge moving too much at top of image")
+        return prev_edge
+    elif abs(prev_edge.x_at_height(img.shape[0]) - edge.x_at_height(img.shape[0])) > img.shape[1]*max_delta:
+        print("Was unable to update edge due to edge moving too much at bottom of image")
+        return prev_edge
+    else:
+        return edge
+
+#@profile
+def linest_ransac(data,n_sample=3,n_iters=50,inlier_thresh=10.,inlier_ratio_min=.15,inlier_ratio_max=1.0):
+    '''
+    data: ndarray with shape (n,2) dtype=np.float32
+    n_sample: int, number of points to use in the fit    
+    n_iters: int, maximum number of iterations
+    inlier_thresh: float, distance in pixels from model to datapoint to indicate an inlier
+    inlier_ratio_min: float [0,1], % of the datapoints that must be inliers
+    inlier_ratio_max: float [0,1], must be > inlier_ratio_min, If this % of datapoints are inliers,
+        consider it a good fit and return early. Can be set to 1 to disable. 
+    '''
+    
+    n_datapoints = data.shape[0]
+    
+    best_inlier_count = 0
+    best_l1 = 1e10
+    best_l1_inlier = 1e10
+    best_eqn = np.zeros((2),dtype=np.float32)
+    iterations_since_change = 0
+    
+    for idx in range(n_iters):
+        iterations_since_change += 1
+        sample_idx = np.random.choice(n_datapoints,n_sample,replace=False)
+        #sample_idx = np.sort(sample_idx)
+        sample = data[sample_idx,:]
+        try:
+            eqn = np.polyfit(sample[:,0],sample[:,1],deg=1)
+            poly = np.poly1d(eqn)
+            prediction = poly(data[:,0])
+        except:
+            print("Error running poly fit on idx {:.0f}".format(idx))
+            print(sample)
+        
+        x1 = data[0,0]
+        x2 = data[-1,0]
+        y1 = prediction[0]
+        y2 = prediction[-1]
+        x0 = data[:,0]
+        y0 = data[:,1]
+
+        num = np.abs( (y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1 )
+        den = ( (y2-y1)**2 + (x2-x1)**2 )**0.5
+        errors = num/den
+        l1 = np.mean(errors)
+        #print("min: {:7.2f} max: {:7.2f} mean: {:7.2f} l1: {:7.2f}".format(errors.min(),errors.max(),errors.mean(),l1))
+        inlier_idx = np.where(errors<inlier_thresh)
+        inlier_count = inlier_idx[0].shape[0]
+        l1_inlier = np.mean(errors[inlier_idx])
+        
+        #print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} l1: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,l1))
+        if (inlier_count > best_inlier_count) and (inlier_count >= n_datapoints*inlier_ratio_min):
+            print("New best inlier count by having more inliers")
+            print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
+            best_inlier_count = inlier_count
+            best_eqn = eqn
+            best_l1 = l1
+            best_l1_inlier = l1_inlier
+            best_sample_idx = sample_idx
+            iterations_since_change = 0
+            
+        elif (inlier_count == best_inlier_count) and (l1 < best_l1) and (l1_inlier < best_l1_inlier):
+            print("Matched best liner count with better L1 error for inlier")
+            print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
+            best_inlier_count = inlier_count
+            best_eqn = eqn
+            best_l1 = l1
+            best_l1_inlier = l1_inlier
+            best_sample_idx = sample_idx
+            iterations_since_change = 0
+            
+        if best_inlier_count > (n_datapoints*inlier_ratio_max):
+            #print("Met escape condition at idx {} with {} inliers, needed {:.0f}".format(idx,best_inlier_count,n_datapoints*inlier_ratio_max))
+            break
+    print("Iterations since change: {}".format(iterations_since_change))
+
+    if best_inlier_count == 0:
+        return None,None
+    else:
+        return best_eqn, best_sample_idx
+        
 def verify_points_order(points):
     '''
     Ensures a list of QCoreQPoint objects (or mocks) are in order

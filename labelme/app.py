@@ -30,7 +30,7 @@ from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import ZoomWidget
 
-from .utils import adjust_edges
+from .utils import adjust_edges, adjust_edges_correlation
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -174,6 +174,29 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QShortcut(QtGui.QKeySequence('s'), self, self.scrollDown)
         QtWidgets.QShortcut(QtGui.QKeySequence('a'), self, self.scrollLeft)
         QtWidgets.QShortcut(QtGui.QKeySequence('d'), self, self.scrollRight)
+
+        modify_by = 1
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('/'), self, self.move_point)
+        hotkey.point_to_modify = 0;hotkey.modify_by = -modify_by
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('*'), self, self.move_point)
+        hotkey.point_to_modify = 0;hotkey.modify_by = modify_by
+
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('8'), self, self.move_point)
+        hotkey.point_to_modify = 1;hotkey.modify_by = -modify_by
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('9'), self, self.move_point)
+        hotkey.point_to_modify = 1;hotkey.modify_by = modify_by
+
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('5'), self, self.move_point)
+        hotkey.point_to_modify = 2;hotkey.modify_by = -modify_by
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('6'), self, self.move_point)
+        hotkey.point_to_modify = 2;hotkey.modify_by = modify_by
+
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('2'), self, self.move_point)
+        hotkey.point_to_modify = 3;hotkey.modify_by = -modify_by
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('3'), self, self.move_point)
+        hotkey.point_to_modify = 3;hotkey.modify_by = modify_by
+        
+
 
         self.canvas.newShape.connect(self.newShape)
         self.canvas.shapeMoved.connect(self.setDirty)
@@ -1242,6 +1265,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def scrollRight(self):
         self.scrollRequest(-180,1)
 
+    def move_point(self):
+        target = self.sender()
+        point_id = target.point_to_modify
+        modify_by = target.modify_by
+        for shape in self.labelList.shapes:
+            if shape.label == self._config['auto_detect_edges_from_previous_label']:
+                shape.points[point_id].setX(shape.points[point_id].x() + modify_by)
+                self.setDirty() # force save
+                self.paintCanvas() # update view
+                return
+
     def scrollRequest(self, delta, orientation):
         units = - delta * 0.1  # natural scroll
         bar = self.scrollBars[orientation]
@@ -1355,6 +1389,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 .format(filename, ','.join(formats)))
             self.status("Error reading %s" % filename)
             return False
+        if hasattr(self,"image"):
+            self.image_previous = self.image.copy()
         self.image = image
         self.filename = filename
         if self._config['keep_prev']:
@@ -1374,10 +1410,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 for shape in self.labelList.shapes:
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
-                            shape.points = adjust_edges(image,shape.points)
+                            #shape.points = adjust_edges(image,shape.points)
+                            shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.005)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")
+                            print("{}".format(e))
 
         self.setClean()
         self.canvas.setEnabled(True)
