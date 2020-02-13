@@ -78,6 +78,19 @@ class Edge:
 
         return [(x_left,0),(x_right,self.image_height)]
 
+    def scale(self,factor):
+        '''
+        Returns an edge object that is scaled by factor
+        A factor of 2 will double all values
+        A factor of 0.5 will half all values
+        '''
+        pt1 = QtCore.QPoint(int(self.pt1.x()*factor), int(self.pt1.y()*factor))
+        pt2 = QtCore.QPoint(int(self.pt2.x()*factor), int(self.pt2.y()*factor))
+        height = int(self.image_height * factor)
+        width = int(self.image_width * factor)
+        e = Edge(pt1,pt2,height,width)
+        return e
+
 def convertQImageToMat(incomingImage):
     '''
     Converts a QImage into an opencv MAT format  
@@ -270,8 +283,12 @@ def adjust_edges_correlation(image,previous_image,previous_points,max_delta=.015
     kernel = (5,5)
     sigmaX = 2
 
-    img = cv2.GaussianBlur(img,kernel,sigmaX)    
+    img = cv2.resize(img,(img.shape[1]//2,img.shape[0]//2))
+    prev_img = cv2.resize(prev_img,(prev_img.shape[1]//2,prev_img.shape[0]//2))
+
+    img = cv2.GaussianBlur(img,kernel,sigmaX)
     prev_edge_left = Edge(previous_points[0],previous_points[3],height,width)
+    prev_edge_left = prev_edge_left.scale(0.5)
     edge_left = process_edge_correlation(img,
                                         prev_img,
                                         prev_edge_left,
@@ -280,11 +297,12 @@ def adjust_edges_correlation(image,previous_image,previous_points,max_delta=.015
                                         blur_sigma=1,
                                         padding=8,
                                         num_per_side=3,
-                                        patch_size=(16,900),
-                                        patch_offset=300,
+                                        patch_size=(8,450),
+                                        patch_offset=150,
                                         side="left")
     
     prev_edge_right = Edge(previous_points[1],previous_points[2],height,width)
+    prev_edge_right = prev_edge_right.scale(0.5)
     edge_right = process_edge_correlation(img,
                                         prev_img,
                                         prev_edge_right,
@@ -293,10 +311,12 @@ def adjust_edges_correlation(image,previous_image,previous_points,max_delta=.015
                                         blur_sigma=1,
                                         padding=8,
                                         num_per_side=3,
-                                        patch_size=(8,900),
-                                        patch_offset=-300,
+                                        patch_size=(8,450),
+                                        patch_offset=-150,
                                         side="right")
     
+    edge_left = edge_left.scale(2)
+    edge_right = edge_right.scale(2)
     points = [edge_left.pt1,edge_right.pt1,edge_right.pt2,edge_left.pt2]
     return points
 

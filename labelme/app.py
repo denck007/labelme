@@ -1411,7 +1411,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
                             #shape.points = adjust_edges(image,shape.points)
-                            shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.005)
+                            shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")
