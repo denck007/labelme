@@ -169,7 +169,7 @@ class LabelFile(object):
             imageData=imageData,
             imageHeight=imageHeight,
             imageWidth=imageWidth,
-            added_on=datetime.datetime.utcnow().isoformat()
+            added_on=datetime.datetime.now().astimezone().isoformat()
         )
         for key, value in otherData.items():
             data[key] = value
