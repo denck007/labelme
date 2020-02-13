@@ -1,6 +1,6 @@
 cache: /home/nedenckl/railedge_cache
 server: L10349
-port: 9999
+port: 8000
 username: nedenckl
 password: Loram3900!
 max_hits_to_cache: 5 # do not download more than this many hits
@@ -14,7 +14,7 @@ auto_detect_edges_from_previous_label: edge # name of the label to edit
 auto_save: true
 display_label_popup: true
 instance_label_auto_increment: true
-store_data: true
+store_data: false
 keep_prev: true
 logger_level: info
 

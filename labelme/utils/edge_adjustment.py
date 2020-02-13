@@ -493,8 +493,8 @@ def linest_ransac(data,n_sample=3,n_iters=50,inlier_thresh=10.,inlier_ratio_min=
         
         #print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} l1: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,l1))
         if (inlier_count > best_inlier_count) and (inlier_count >= n_datapoints*inlier_ratio_min):
-            print("New best inlier count by having more inliers")
-            print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
+            #print("New best inlier count by having more inliers")
+            #print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
             best_inlier_count = inlier_count
             best_eqn = eqn
             best_l1 = l1
@@ -503,8 +503,8 @@ def linest_ransac(data,n_sample=3,n_iters=50,inlier_thresh=10.,inlier_ratio_min=
             iterations_since_change = 0
             
         elif (inlier_count == best_inlier_count) and (l1 < best_l1) and (l1_inlier < best_l1_inlier):
-            print("Matched best liner count with better L1 error for inlier")
-            print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
+            #print("Matched best liner count with better L1 error for inlier")
+            #print("\titer {:04d} inlier_count: {:04d} best_inlier_count: {:04d} min_inlier_count:{:04.0f} best_l1: {:.5f} l1: {:.5f} best_l1_inlier: {:.5f} l1_inlier: {:.5f}".format(idx,inlier_count,best_inlier_count,n_datapoints*inlier_ratio_min,best_l1,l1,best_l1_inlier,l1_inlier))
             best_inlier_count = inlier_count
             best_eqn = eqn
             best_l1 = l1
@@ -515,7 +515,7 @@ def linest_ransac(data,n_sample=3,n_iters=50,inlier_thresh=10.,inlier_ratio_min=
         if best_inlier_count > (n_datapoints*inlier_ratio_max):
             #print("Met escape condition at idx {} with {} inliers, needed {:.0f}".format(idx,best_inlier_count,n_datapoints*inlier_ratio_max))
             break
-    print("Iterations since change: {}".format(iterations_since_change))
+    #print("Iterations since change: {}".format(iterations_since_change))
 
     if best_inlier_count == 0:
         return None,None

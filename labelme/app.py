@@ -1,3 +1,4 @@
+import copy
 import functools
 import os
 import os.path as osp
@@ -170,11 +171,14 @@ class MainWindow(QtWidgets.QMainWindow):
             Qt.Horizontal: scrollArea.horizontalScrollBar(),
         }
         self.canvas.scrollRequest.connect(self.scrollRequest)
+
+        # Hotkeys for moving image around
         QtWidgets.QShortcut(QtGui.QKeySequence('w'), self, self.scrollUp)
         QtWidgets.QShortcut(QtGui.QKeySequence('s'), self, self.scrollDown)
         QtWidgets.QShortcut(QtGui.QKeySequence('a'), self, self.scrollLeft)
         QtWidgets.QShortcut(QtGui.QKeySequence('d'), self, self.scrollRight)
 
+        # Hotkeys for moving the points around
         modify_by = 1
         hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('/'), self, self.move_point)
         hotkey.point_to_modify = 0;hotkey.modify_by = -modify_by
@@ -195,8 +199,10 @@ class MainWindow(QtWidgets.QMainWindow):
         hotkey.point_to_modify = 3;hotkey.modify_by = -modify_by
         hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('3'), self, self.move_point)
         hotkey.point_to_modify = 3;hotkey.modify_by = modify_by
-        
 
+        # tracking of the average manual adjustment
+        self.current_adjustment = [0,0,0,0]
+        self.average_adjustment = [0.,0.,0.,0.]
 
         self.canvas.newShape.connect(self.newShape)
         self.canvas.shapeMoved.connect(self.setDirty)
@@ -748,6 +754,14 @@ class MainWindow(QtWidgets.QMainWindow):
             d) Save file
         '''
         print("in pushToServer")
+        response = input("You are going to push labels from {}\nto server {} on port {} as {}. Continue? <y/n>\n".format(self._config["cache"],
+                                                                                                                        self._config["server"],
+                                                                                                                        self._config["port"],
+                                                                                                                        self._config["username"]))
+        if (response.lower() == "no") or (response.lower() == "n"):
+            print("Exiting submit to server!")
+            return
+
         fnames = []
         for root,_,files in os.walk(self._config["cache"]):
             for fname_short in files:
@@ -1265,16 +1279,37 @@ class MainWindow(QtWidgets.QMainWindow):
     def scrollRight(self):
         self.scrollRequest(-180,1)
 
-    def move_point(self):
-        target = self.sender()
-        point_id = target.point_to_modify
-        modify_by = target.modify_by
+    def move_point(self,point_id=None,modify_by=None):
+        '''
+        Move point_id by modify_by pixels in the x direction.
+        If point_id and modify_by are None, then it will look at the sender
+            to determine the values
+        point_id: int, 0-3. Id of the point to move, clockwise from top left
+        modify_by: int, real number. Number of pixels (+/-) to move the point by
+        '''
+        if point_id is None and modify_by is None:
+            target = self.sender()
+            point_id = target.point_to_modify
+            modify_by = target.modify_by
         for shape in self.labelList.shapes:
             if shape.label == self._config['auto_detect_edges_from_previous_label']:
                 shape.points[point_id].setX(shape.points[point_id].x() + modify_by)
                 self.setDirty() # force save
                 self.paintCanvas() # update view
+                self.current_adjustment[point_id] += modify_by # update how much the adjustment 
                 return
+
+    def apply_average_adjustment(self):
+        '''
+        Apply the adjustments from self.average_adjustment to the current points
+        '''
+        print()
+        for shape in self.labelList.shapes:
+            if shape.label == self._config['auto_detect_edges_from_previous_label']:
+                for point_id,modify_by in enumerate(self.average_adjustment):
+                    self.move_point(point_id=point_id,modify_by=int(modify_by))
+                    print("Applying average modification of point {:.0f} by {:.2f}".format(point_id,modify_by))
+            return
 
     def scrollRequest(self, delta, orientation):
         units = - delta * 0.1  # natural scroll
@@ -1390,7 +1425,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.status("Error reading %s" % filename)
             return False
         if hasattr(self,"image"):
+            # Keep a copy of the previous image,
+            # Track the average adjustment the user makes
             self.image_previous = self.image.copy()
+            factor = 0.9
+            self.average_adjustment = [factor*a + (1-factor)*p for a,p in zip(self.average_adjustment,self.current_adjustment) ]
+            self.current_adjustment = [0,0,0,0]
         self.image = image
         self.filename = filename
         if self._config['keep_prev']:
@@ -1416,6 +1456,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         except Exception as e:
                             print("Not able to adjust the bounding box!")
                             print("{}".format(e))
+                self.apply_average_adjustment()
 
         self.setClean()
         self.canvas.setEnabled(True)
