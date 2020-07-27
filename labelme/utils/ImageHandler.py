@@ -85,6 +85,7 @@ class ImageHandler:
 
             # Now get the hit image for the remaining images in the hit, then request all of them
             #   Dont forget to handle pagination
+            hit_images_combined = []
             request = "hit_id={}".format(hit["id"])
             page_id = 0
             while True:
@@ -98,8 +99,13 @@ class ImageHandler:
                     if hit_images["detail"] == "Invalid page.":
                         break
                 else:
+                    hit_images_combined.extend([hit_image["image"] for hit_image in hit_images])
                     image_ids = self._download_images_from_hit_images(hit_images,image_path,existing_image_ids)
+                    #image_ids = []
                     self.need_railedge_labeled[hit["id"]] = image_ids
+
+            with open(os.path.join(self.cache,"hit_{:08.0f}".format(hit["id"]),"images_in_hit.json"),"w") as fp:
+                json.dump(hit_images_combined,fp)
 
     def _download_images_from_hit_images(self,hit_images,image_path,existing_image_ids):
         '''
