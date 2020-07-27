@@ -31,7 +31,7 @@ from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import ZoomWidget
 
-from .utils import adjust_edges, adjust_edges_correlation
+from .utils import adjust_edges, adjust_edges_correlation, adjust_edges_local_sobel
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -754,13 +754,13 @@ class MainWindow(QtWidgets.QMainWindow):
             d) Save file
         '''
         print("in pushToServer")
-        response = input("You are going to push labels from {}\nto server {} on port {} as {}. Continue? <y/n>\n".format(self._config["cache"],
-                                                                                                                        self._config["server"],
-                                                                                                                        self._config["port"],
-                                                                                                                        self._config["username"]))
-        if (response.lower() == "no") or (response.lower() == "n"):
-            print("Exiting submit to server!")
-            return
+        #response = input("You are going to push labels from {}\nto server {} on port {} as {}. Continue? <y/n>\n".format(self._config["cache"],
+        #                                                                                                                self._config["server"],
+        #                                                                                                                self._config["port"],
+        #                                                                                                                self._config["username"]))
+        #if (response.lower() == "no") or (response.lower() == "n"):
+        #    print("Exiting submit to server!")
+        #    return
 
         fnames = []
         for root,_,files in os.walk(self._config["cache"]):
@@ -1451,12 +1451,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
                             #shape.points = adjust_edges(image,shape.points)
-                            shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
+                            #shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
+                            shape.points = adjust_edges_local_sobel(image,self.image_previous,shape.points,max_delta=0.01)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")
                             print("{}".format(e))
-                self.apply_average_adjustment()
+                #self.apply_average_adjustment()
 
         self.setClean()
         self.canvas.setEnabled(True)
@@ -1560,10 +1561,8 @@ class MainWindow(QtWidgets.QMainWindow):
             filename = self.imageList[0]
         else:
             currIndex = self.imageList.index(self.filename)
-            if currIndex + 1 < len(self.imageList):
-                filename = self.imageList[currIndex + 1]
-            else:
-                filename = self.imageList[-1]
+            nextIndex = min(currIndex+self._config['manual_label_every_n'],len(self.imageList)-1)
+            filename = self.imageList[nextIndex]
         self.filename = filename
 
         if self.filename and load:

@@ -579,3 +579,64 @@ def plot_list_points(p):
     for idx,c in enumerate(['r','g','b']):
         plt.plot([p[idx].x(),p[idx+1].x()],[p[idx].y(),p[idx+1].y()],c)
     plt.show()
+
+def adjust_edges_local_sobel(image,previous_image,previous_points,max_delta=.015):
+    '''
+    Given the previous image and the points selected on the previous image,
+        adjust the edges for best fit on the new image
+
+    Takes the vertical sobel in a region around the point in the previous image and sums it vertically.
+    Take the sobel of the current image in the same region, and find the highest match
+    Move the points to the point of highest match
+    '''
+
+    img = convertQImageToMat(image)
+    prev_img = convertQImageToMat(previous_image)
+    # Error checking on image shapes
+    shape_img = img.shape
+    shape_prev = prev_img.shape
+    if (len(shape_img) == 3) and (len(shape_prev) == 3):
+        height,width,_ = shape_img
+    elif (len(shape_img) == 2) and (len(shape_prev) == 2):
+        height,width,_ = shape_img
+    else:
+        raise TypeError("Invalid image dimensions {} for image and {} for previous_image. These must match!".format(shape_img,shape_prev))
+
+    # Ensure proper dtypes
+    if prev_img.dtype is np.dtype(np.uint8):
+        prev_img = prev_img.astype(np.float32)/255.
+    if img.dtype is np.dtype(np.uint8):
+        img = img.astype(np.float32)/255.
+    
+    if not verify_points_order(previous_points):
+        raise PointsIncorrectOrder("Points are not in correct order, must be clockwise from top left")
+
+    filter_region_width = 7
+    search_region_width = 15
+    search_region_height = 55
+
+    deltas = []
+    points = []
+    for idx, point in enumerate(previous_points):
+        top = int(np.clip(point.y() - search_region_height//2, 0, shape_prev[0]))
+        bottom = int(np.clip(point.y() + search_region_height//2, 0, shape_prev[0]))
+        left = int(np.clip(point.x() - filter_region_width//2, 0, shape_prev[1]))
+        right = int(np.clip(point.x() + filter_region_width//2, 0, shape_prev[1]))
+
+        f = cv2.GaussianBlur(prev_img[top:bottom, left:right,0], (5,5), 2)
+        f = np.abs(cv2.Sobel(f, cv2.CV_32F, 1, 0, ksize=3))
+        f = np.mean(f,axis=0)
+
+        left = int(np.clip(point.x() - search_region_width//2, 0, shape_img[1]))
+        right = int(np.clip(point.x() + search_region_width//2, 0, shape_img[1]))
+        signal = cv2.GaussianBlur(img[top:bottom, left:right,0], (5,5), 2)
+        signal = np.abs(cv2.Sobel(signal, cv2.CV_32F, 1, 0, ksize=3))
+        signal = np.mean(signal,axis=0)
+        
+        rst = np.convolve(signal, f, mode="same")
+        x = np.argmax(rst) + left
+        points.append(QtCore.QPoint(x,point.y()))
+        deltas.append(point.x() - x)
+    print(deltas)
+        
+    return points
