@@ -1,5 +1,6 @@
 import requests
 import os
+import shutil
 import json
 import base64
 import datetime
@@ -63,7 +64,8 @@ class ImageHandler:
             max_images_downloaded = int(self.config['max_images_to_cache'])
 
         # first get the next hits
-        request = "hit_type__hit_type=RailEdge&completed=False"
+        request = "id=17261"
+        #request = "hit_type__hit_type=RailEdge&completed=False"
         url = "{}?{}&format=json".format(self.url_api_hit,request)
         response = self.client.get(url)
         hits = response.json() #these are the hits that are not yet completed
@@ -122,17 +124,24 @@ class ImageHandler:
             images.append(image_id)
             if image_id in existing_image_ids:
                 continue
-            request = "id={}".format(image_id)
-            url = "{}?{}&format=json".format(self.url_api_image,request)
-            response = self.client.get(url)
-            response_json = response.json()
-            if len(response_json) == 1:
-                self._image_decoder_base64(response_json[0],image_path)
-            elif len(response_json) == 0:
-                raise RuntimeError("Did not get an image {} for hit {}".format(image_id,hit_image["hit"]))
-            else:
-                raise RuntimeError("Got more than one image response for image {} for hit {}".format(image_id,hit_image["hit"]))
             
+            # check local image store
+            local_store_filename = os.path.join(self.config["local_image_store"],f"{image_id}.jpeg")
+            if os.path.isfile( local_store_filename ):
+                shutil.copyfile(local_store_filename, os.path.join(image_path,f"{image_id}.jpeg"))
+            else:
+                print(f"!!Missed local_image_store cache looked for {local_store_filename}")
+                request = "id={}".format(image_id)
+                url = "{}?{}&format=json".format(self.url_api_image,request)
+                response = self.client.get(url)
+                response_json = response.json()
+                if len(response_json) == 1:
+                    self._image_decoder_base64(response_json[0],image_path)
+                elif len(response_json) == 0:
+                    raise RuntimeError("Did not get an image {} for hit {}".format(image_id,hit_image["hit"]))
+                else:
+                    raise RuntimeError("Got more than one image response for image {} for hit {}".format(image_id,hit_image["hit"]))
+                
             self._images_downloaded += 1
             if self._images_downloaded > self._max_images_downloaded:
                 return images

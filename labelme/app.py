@@ -4,6 +4,7 @@ import os
 import os.path as osp
 import sys
 import re
+import time
 import webbrowser
 
 from qtpy import QtCore
@@ -179,7 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QShortcut(QtGui.QKeySequence('d'), self, self.scrollRight)
 
         # Hotkeys for moving the points around
-        modify_by = 1
+        modify_by = 2
         hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('/'), self, self.move_point)
         hotkey.point_to_modify = 0;hotkey.modify_by = -modify_by
         hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('*'), self, self.move_point)
@@ -237,6 +238,8 @@ class MainWindow(QtWidgets.QMainWindow):
         server_login = action('Login to the server',self.server_Login,tip='Login to the server using the credentials stored in the config file')
         server_getNewImages = action('Get unlabeled images from server',self.server_GetNewImages,tip="Download the images for the next uncompleted hits",enabled=False)
         server_pushLabels = action('Push labels in cache to server',self.server_PushLabels,tip="Upload any labels to server that are not already there",enabled=False)
+        interpolate_between_labels_action = action('Interpolate results for images between the existing labels', 
+                                                    self.interpolate_between_labels,tip="Generate labels for unlabeled images by intrerpolating between existing labels",enabled=False)
 
         # Generic
         quit = action('&Quit', self.close, shortcuts['quit'], 'quit',
@@ -577,7 +580,8 @@ class MainWindow(QtWidgets.QMainWindow):
             (
                 server_login,
                 server_getNewImages,
-                server_pushLabels
+                server_pushLabels,
+                interpolate_between_labels_action
             ),
         )
         utils.addActions(self.menus.help, (help,))
@@ -770,10 +774,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 fnames.append(os.path.join(root,fname_short))
 
         label_count = len(fnames)
+        start_time = time.time()
         for idx,fname in enumerate(fnames):
+            if "images_in_hit" in fname:
+                continue
             self.status("Submitting label {:>5.0f}/{:<5.0f}...".format(idx,label_count))
             self.imageHandler.submit_label_file(fname)
+            if idx % 10 == 0:
+                elapsed = time.time() - start_time
+                per_iter = elapsed / (1+idx)
+                remaining = per_iter * (label_count-idx)
+                print(f"\rUploaded {idx}/{label_count} labels, Time remaining: {remaining:6.1f}s",end="")
+        print()
         self.status("Finished submitting {:.0f} labels to server".format(label_count))
+
+    def interpolate_between_labels(self):
+        '''
+        Generate labels for un-labeled images by interpolating results between 2 labeled images
+
+        '''
+        pass
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
@@ -1450,9 +1470,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 for shape in self.labelList.shapes:
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
-                            #shape.points = adjust_edges(image,shape.points)
+                            shape.points = adjust_edges(image,shape.points)
                             #shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
-                            shape.points = adjust_edges_local_sobel(image,self.image_previous,shape.points,max_delta=0.01)
+                            #shape.points = adjust_edges_local_sobel(image,self.image_previous,shape.points,max_delta=0.01)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")

@@ -619,16 +619,16 @@ def adjust_edges_local_sobel(image,previous_image,previous_points,max_delta=.015
     points = []
     for idx, point in enumerate(previous_points):
         top = int(np.clip(point.y() - search_region_height//2, 0, shape_prev[0]))
-        bottom = int(np.clip(point.y() + search_region_height//2, 0, shape_prev[0]))
+        bottom = int(np.clip(point.y() + search_region_height//2+1, 0, shape_prev[0]))
         left = int(np.clip(point.x() - filter_region_width//2, 0, shape_prev[1]))
-        right = int(np.clip(point.x() + filter_region_width//2, 0, shape_prev[1]))
+        right = int(np.clip(point.x() + filter_region_width//2+1, 0, shape_prev[1]))
 
         f = cv2.GaussianBlur(prev_img[top:bottom, left:right,0], (5,5), 2)
         f = np.abs(cv2.Sobel(f, cv2.CV_32F, 1, 0, ksize=3))
         f = np.mean(f,axis=0)
 
         left = int(np.clip(point.x() - search_region_width//2, 0, shape_img[1]))
-        right = int(np.clip(point.x() + search_region_width//2, 0, shape_img[1]))
+        right = int(np.clip(point.x() + search_region_width//2+1, 0, shape_img[1]))
         signal = cv2.GaussianBlur(img[top:bottom, left:right,0], (5,5), 2)
         signal = np.abs(cv2.Sobel(signal, cv2.CV_32F, 1, 0, ksize=3))
         signal = np.mean(signal,axis=0)
@@ -637,6 +637,9 @@ def adjust_edges_local_sobel(image,previous_image,previous_points,max_delta=.015
         x = np.argmax(rst) + left
         points.append(QtCore.QPoint(x,point.y()))
         deltas.append(point.x() - x)
+        
     print(deltas)
         
     return points
+
+
