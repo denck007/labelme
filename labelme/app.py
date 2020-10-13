@@ -778,7 +778,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.imageHandler.submit_label_file(fname)
             except:
                 exc = sys.exc_info()
-                errors[fname] = [exc[0],exc[1]]
+                errors[fname] = [str(exc[0]),str(exc[1])]
 
             if idx % 10 == 0:
                 elapsed = time.time() - start_time
@@ -790,10 +790,10 @@ class MainWindow(QtWidgets.QMainWindow):
             error_log_fname = os.path.join(self._config["cache"],f"submit_errors_{datetime.datetime.now().strftime('%Y%m%dT%H%M%S')}.json")
             print(f"\n\nHad errors on the following files. Data is dumped to {error_log_fname} ")
             for key in errors:
-                print(f"\t{key}: {errors[key][0]}")
+                print(f"\t{key}: {str(errors[key][0])}")
             with open(error_log_fname,'w') as fp:
                 json.dump(errors,fp)
-
+        print(f"Finished uploading labels in {time.time() - start_time:.1f}seconds")
         self.status("Finished submitting {:.0f} labels to server".format(label_count))
 
     def interpolate_between_labels(self):
