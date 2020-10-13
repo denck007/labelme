@@ -6,6 +6,8 @@ import sys
 import re
 import time
 import webbrowser
+import datetime
+import json
 
 from qtpy import QtCore
 from qtpy.QtCore import Qt
@@ -758,34 +760,40 @@ class MainWindow(QtWidgets.QMainWindow):
             d) Save file
         '''
         print("in pushToServer")
-        #response = input("You are going to push labels from {}\nto server {} on port {} as {}. Continue? <y/n>\n".format(self._config["cache"],
-        #                                                                                                                self._config["server"],
-        #                                                                                                                self._config["port"],
-        #                                                                                                                self._config["username"]))
-        #if (response.lower() == "no") or (response.lower() == "n"):
-        #    print("Exiting submit to server!")
-        #    return
-
         fnames = []
         for root,_,files in os.walk(self._config["cache"]):
             for fname_short in files:
-                if fname_short[-5:] != ".json":
+                if fname_short[-5:] != ".json": # only look for json files
+                    continue
+                if not fname_short[:-5].isnumeric(): # only look for file names that are all numeric
                     continue
                 fnames.append(os.path.join(root,fname_short))
 
         label_count = len(fnames)
         start_time = time.time()
+        errors = {}
         for idx,fname in enumerate(fnames):
-            if "images_in_hit" in fname:
-                continue
             self.status("Submitting label {:>5.0f}/{:<5.0f}...".format(idx,label_count))
-            self.imageHandler.submit_label_file(fname)
+            try:
+                self.imageHandler.submit_label_file(fname)
+            except:
+                exc = sys.exc_info()
+                errors[fname] = [exc[0],exc[1]]
+
             if idx % 10 == 0:
                 elapsed = time.time() - start_time
                 per_iter = elapsed / (1+idx)
                 remaining = per_iter * (label_count-idx)
                 print(f"\rUploaded {idx}/{label_count} labels, Time remaining: {remaining:6.1f}s",end="")
         print()
+        if len(errors) > 0:
+            error_log_fname = os.path.join(self._config["cache"],f"submit_errors_{datetime.datetime.now().strftime('%Y%m%dT%H%M%S')}.json")
+            print(f"\n\nHad errors on the following files. Data is dumped to {error_log_fname} ")
+            for key in errors:
+                print(f"\t{key}: {errors[key][0]}")
+            with open(error_log_fname,'w') as fp:
+                json.dump(errors,fp)
+
         self.status("Finished submitting {:.0f} labels to server".format(label_count))
 
     def interpolate_between_labels(self):

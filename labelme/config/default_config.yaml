@@ -1,4 +1,4 @@
-cache: C:\TEMP\railedge_cache\
+cache: C:\railedge_cache\
 local_image_store: E:\RailSurfaceScoringDataset\images # This is a local cache of images. Will check here before downloading them from the server
 server: L10349
 port: 8000
