@@ -91,6 +91,21 @@ class Edge:
         e = Edge(pt1,pt2,height,width)
         return e
 
+    def edge_at_y(self, y1, y2):
+        '''
+        Generate a new edge with the points along the current edge, but with the y locations at the specified positions
+        '''
+        y_top = max(y1, y2)
+        y_bot = min(y1, y2)
+        if self.pt1.y() > self.pt2.y():
+            pt1 = QtCore.QPoint(self.x_at_height(y_top), y_top)
+            pt2 = QtCore.QPoint(self.x_at_height(y_bot), y_bot)
+        else:
+            pt1 = QtCore.QPoint(self.x_at_height(y_bot), y_bot)
+            pt2 = QtCore.QPoint(self.x_at_height(y_top), y_top)
+        
+        return Edge(pt1, pt2, self.image_height, self.image_width)
+
 def convertQImageToMat(incomingImage):
     '''
     Converts a QImage into an opencv MAT format  
@@ -642,4 +657,153 @@ def adjust_edges_local_sobel(image,previous_image,previous_points,max_delta=.015
         
     return points
 
+def adjust_edges_lines(image_source,previous_points):
+    '''
+    Given an image and the label points of the previous image, determine where the rail edges are
+    the previous points are used as a prior, and if no better canididate are found they are returned
+
+    '''
+    if not verify_points_order(previous_points):
+        raise PointsIncorrectOrder("Points are not in correct order, must be clockwise from top left")
+
+    image = convertQImageToMat(image_source)[:,:,0]
+    shape = image.shape
+    if len(shape) == 3:
+        image_height, image_width,_ = shape
+    elif len(shape) == 2:
+        image_height, image_width = shape
+    else:
+        raise TypeError("Invalid image dimensions {}".format(image.shape))
+
+    target_width = 512
+    padding_width = 50
+    scale_factor = 1.0
+    target_width_scaled = int(target_width*scale_factor)
+    padding_width_scaled = int(padding_width*scale_factor)
+
+    image_height_scaled = image_height * scale_factor
+
+    ref_edge_left = Edge(previous_points[0],previous_points[3], image_height, image_width)
+    ref_edge_right = Edge(previous_points[1],previous_points[2], image_height, image_width)
+
+    # Transform the image to be aligned to the previous image
+    start = np.array([[ref_edge_left.x_at_height(0), 0],
+                        [ref_edge_right.x_at_height(0), 0],
+                        [ref_edge_right.x_at_height(image_height), image_height],
+                        [ref_edge_left.x_at_height(image_height), image_height]],dtype=np.float32)
+    end = np.array([[padding_width_scaled, 0],
+                    [padding_width_scaled + target_width_scaled, 0],
+                    [padding_width_scaled + target_width_scaled, image_height_scaled],
+                    [padding_width_scaled, image_height_scaled]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(start, end)
+    image_out = cv2.warpPerspective(image, M, dsize=(target_width_scaled+2*padding_width_scaled, int(image_height_scaled)))
+
+    # Process the image
+    vertical_extension_kernel_size = int(50*scale_factor)
+    vertical_extension_threshold = .75 # strong vertical regions have at least this percent of pixels flagged in a vertical region hieght vertical_extension_kernel_size
+
+    # Find strong vertical edge
+    image_blur = cv2.GaussianBlur(image_out, (3,3),1)
+    image_sobel = cv2.Sobel(image_blur, cv2.CV_32FC1, 1, 0, 3)
+    image_sobel = np.abs(image_sobel)
+
+    # Find individual pixels with strong gradients
+    xs = np.ones(image_sobel.shape, dtype=np.uint8)
+    xs[:,:int(5*scale_factor)] = 0 # ignore edges
+    xs[:,-int(5*scale_factor):] = 0
+    xs = np.logical_and(xs, image_sobel > (np.mean(image_sobel)+.5*np.std(image_sobel))) # strongest gradients
+
+    # Find vertical regions of strong gradients
+    kernel = np.ones(vertical_extension_kernel_size,dtype=np.float32)
+    kernel = kernel/np.sum(kernel)
+    highpoints = cv2.filter2D(xs.astype(np.float32),cv2.CV_32FC1, kernel)
+    xs = np.logical_and(xs, highpoints > vertical_extension_threshold)
+
+    # Get rid of noise and connect nearby regions
+    xs = cv2.morphologyEx(xs.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((7,7),np.uint8)) # fill small holes
+    xs = cv2.morphologyEx(xs.astype(np.uint8), cv2.MORPH_OPEN, np.ones((9,3),np.uint8)) # connect vertical regions
+
+    # Find lines
+    rho = 10
+    theta = 10*np.pi/180
+    threshold = 150
+    minLineLength = 150
+    maxLineGap = 800
+    lineCandidates = cv2.HoughLinesP(xs.astype(np.uint8),
+                        rho=rho,
+                        theta=theta,
+                        threshold=threshold,
+                        minLineLength=minLineLength,
+                        maxLineGap=maxLineGap,
+                    )
+
+    line_left_best = None
+    line_right_best = None
+    line_left_best_shift = image_width
+    line_right_best_shift = image_width
+    left_best_flipped = None
+    right_best_flipped = None
+    if lineCandidates is not None: # there were some lines found
+        for line in lineCandidates:
+            # Verify that lines are from top of image to bottom
+            if line[0,1] > line[0,3]: # line goes from bottom to top
+                flipped = True
+                l = np.array([line[0,2], line[0,3], line[0,0], line[0,1]])
+            else:
+                flipped = False
+                l = line[0]
+
+            slope = (l[1]-l[3]) / (l[0]-l[2]+1e-6) 
+            b = l[1] - l[0]*slope
+            x_loc_top = (0 - b) /  (slope + 1e-6)
+            x_loc_bot = (xs.shape[0]-1 - b) / (slope + 1e-6)
+            angle = np.arctan(1/slope) # note this is rotated 90 degrees to keep the angles centered on 0 to make filtering easier
+            if abs(angle) > 3*np.pi/180:
+                continue
+
+            dx_tl = x_loc_top - padding_width_scaled
+            dx_bl = x_loc_bot - padding_width_scaled
+            shift = (dx_tl**2+dx_bl**2)**.5
+            if shift < line_left_best_shift:
+                line_left_best = l
+                line_left_best_shift = shift
+                left_best_flipped = flipped
+                
+            dx_tl = x_loc_top - (padding_width_scaled+target_width_scaled)
+            dx_bl = x_loc_bot - (padding_width_scaled+target_width_scaled)
+            shift = (dx_tl**2+dx_bl**2)**.5
+            if shift < line_right_best_shift:
+                line_right_best = l
+                line_right_best_shift = shift
+                right_best_flipped = flipped
+
+    # If there were no valid edges found, or the valid edges found are too far out of range
+    #   just propigate forward the previous data
+    shift_limit = 15*scale_factor
+    if (line_left_best is None) or (line_left_best_shift > shift_limit):
+        print(f"Did not find an acceptable line for left edge. line_left_best_shift is {line_left_best_shift} but limit is{shift_limit}")
+        line_left_best = np.hstack((end[0],end[3]))
+    if (line_right_best is None) or (line_right_best_shift > shift_limit):
+        print(f"Did not find an acceptable line for right edge. line_right_best_shift is {line_right_best_shift} but limit is{shift_limit}")
+        line_right_best = np.hstack((end[1],end[2]))
+
+    # Now project the identified points back to the original image
+    M = cv2.getPerspectiveTransform(end, start)
+    line_left_best = line_left_best.astype(np.float32)
+    line_right_best = line_right_best.astype(np.float32)
+    points_left = cv2.perspectiveTransform(np.expand_dims(line_left_best.reshape((-1,2)),0), M)[0] # takes and returns shape == (1,n,2)
+    points_right = cv2.perspectiveTransform(np.expand_dims(line_right_best.reshape((-1,2)),0), M)[0]
+
+    edge_left = Edge(QtCore.QPoint(points_left[0,0], points_left[0,1]), QtCore.QPoint(points_left[1,0], points_left[1,1]), image_height, image_width)
+    edge_right = Edge(QtCore.QPoint(points_right[0,0], points_right[0,1]), QtCore.QPoint(points_right[1,0], points_right[1,1]), image_height, image_width)
+
+    edge_left = edge_left.edge_at_y(previous_points[0].y(), previous_points[3].y())
+    edge_right = edge_right.edge_at_y(previous_points[1].y(), previous_points[2].y())
+
+    points = [edge_left.pt1,edge_right.pt1,edge_right.pt2,edge_left.pt2]
+    
+    if not verify_points_order(points):
+        raise PointsIncorrectOrder("Generated points are not in correct order, must be clockwise from top left")
+    
+    return points
 

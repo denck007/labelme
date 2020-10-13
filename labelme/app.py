@@ -34,7 +34,7 @@ from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import ZoomWidget
 
-from .utils import adjust_edges, adjust_edges_correlation, adjust_edges_local_sobel
+from .utils import adjust_edges, adjust_edges_correlation, adjust_edges_local_sobel, adjust_edges_lines
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -1478,9 +1478,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 for shape in self.labelList.shapes:
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
-                            shape.points = adjust_edges(image,shape.points)
+                            #shape.points = adjust_edges(image,shape.points)
                             #shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
                             #shape.points = adjust_edges_local_sobel(image,self.image_previous,shape.points,max_delta=0.01)
+                            shape.points = adjust_edges_lines(image, shape.points)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")

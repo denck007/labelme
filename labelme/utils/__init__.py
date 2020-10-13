@@ -32,3 +32,4 @@ from .ImageHandler import ImageHandler
 from .edge_adjustment  import adjust_edges
 from .edge_adjustment  import adjust_edges_correlation
 from .edge_adjustment  import adjust_edges_local_sobel
+from .edge_adjustment import adjust_edges_lines
