@@ -11,6 +11,7 @@ import numpy as np
 from itertools import permutations
 import matplotlib.pyplot as plt
 
+from labelme.config import get_config
 from labelme.utils.project_specific_exceptions import EdgeLabelingError,EdgeNotFound,PointsIncorrectOrder
 
 class Point(object):
@@ -787,7 +788,7 @@ def adjust_edges_lines(image_source,previous_points):
         print(f"Did not find an acceptable line for right edge. line_right_best_shift is {line_right_best_shift} but limit is{shift_limit}")
         line_right_best = np.hstack((end[1],end[2]))
 
-    # Now project the identified points back to the original image
+    ## Now project the identified points back to the original image
     M = cv2.getPerspectiveTransform(end, start)
     line_left_best = line_left_best.astype(np.float32)
     line_right_best = line_right_best.astype(np.float32)
@@ -806,4 +807,139 @@ def adjust_edges_lines(image_source,previous_points):
         raise PointsIncorrectOrder("Generated points are not in correct order, must be clockwise from top left")
     
     return points
+
+def adjust_edges_pass_through_top_points(application):
+    '''
+    
+    Adjust the bottom points on the image so that they fall on a line that goes through the top selected points
+    '''
+    
+    print('in adjust_edges_pass_through_top_points')
+    print()
+
+    config = get_config()
+    points = None
+    for shape in application.labelList.shapes:
+        if shape.label == config['auto_detect_edges_from_previous_label']:
+            points = shape.points
+            break
+    if points is None:
+        return
+            
+    if not verify_points_order(points):
+        raise PointsIncorrectOrder("Points are not in correct order, must be clockwise from top left")
+
+    image = convertQImageToMat(application.image)[:,:,0]
+    shape = image.shape
+    if len(shape) == 3:
+        image_height, image_width,_ = shape
+    elif len(shape) == 2:
+        image_height, image_width = shape
+    else:
+        raise TypeError("Invalid image dimensions {}".format(image.shape))
+
+    #target_width = 512
+    #padding_width = 50
+    scale_factor = 1.0
+    #target_width_scaled = int(target_width*scale_factor)
+    #padding_width_scaled = int(padding_width*scale_factor)
+
+
+    #ref_edge_left = Edge(previous_points[0],previous_points[3], image_height, image_width)
+    #ref_edge_right = Edge(previous_points[1],previous_points[2], image_height, image_width)
+
+    # Transform the image to be aligned to the previous image
+    #start = np.array([[ref_edge_left.x_at_height(0), 0],
+    #                    [ref_edge_right.x_at_height(0), 0],
+    #                    [ref_edge_right.x_at_height(image_height), image_height],
+    #                    [ref_edge_left.x_at_height(image_height), image_height]],dtype=np.float32)
+    #end = np.array([[padding_width_scaled, 0],
+    #                [padding_width_scaled + target_width_scaled, 0],
+    #                [padding_width_scaled + target_width_scaled, image_height_scaled],
+    #                [padding_width_scaled, image_height_scaled]], dtype=np.float32)
+    #M = cv2.getPerspectiveTransform(start, end)
+    #image_out = cv2.warpPerspective(image, M, dsize=(target_width_scaled+2*padding_width_scaled, int(image_height_scaled)))
+
+    # Process the image
+    vertical_extension_kernel_size = int(50*scale_factor)
+    vertical_extension_threshold = .75 # strong vertical regions have at least this percent of pixels flagged in a vertical region hieght vertical_extension_kernel_size
+
+    # Find strong vertical edge
+    image_out = cv2.resize(image, None,fx=scale_factor, fy=scale_factor)
+    image_blur = cv2.GaussianBlur(image_out, (3,3),1)
+    image_sobel = cv2.Sobel(image_blur, cv2.CV_32FC1, 1, 0, 3)
+    image_sobel = np.abs(image_sobel)
+
+    image_height_scaled = image_height * scale_factor
+    image_width_scaled = image_width * scale_factor
+
+    # Find individual pixels with strong gradients
+    xs = np.ones(image_sobel.shape, dtype=np.uint8)
+    xs[:,:int(5*scale_factor)] = 0 # ignore edges
+    xs[:,-int(5*scale_factor):] = 0
+    xs = np.logical_and(xs, image_sobel > (np.mean(image_sobel)+.5*np.std(image_sobel))) # strongest gradients
+
+    # Find vertical regions of strong gradients
+    kernel = np.ones(vertical_extension_kernel_size,dtype=np.float32)
+    kernel = kernel/np.sum(kernel)
+    highpoints = cv2.filter2D(xs.astype(np.float32),cv2.CV_32FC1, kernel)
+    xs = np.logical_and(xs, highpoints > vertical_extension_threshold)
+
+    # Get rid of noise and connect nearby regions
+    xs = cv2.morphologyEx(xs.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((7,7),np.uint8)) # fill small holes
+    xs = cv2.morphologyEx(xs.astype(np.uint8), cv2.MORPH_OPEN, np.ones((9,3),np.uint8)) # connect vertical regions
+
+    # Find lines
+    rho = 10
+    theta = 10*np.pi/180
+    threshold = int(150*scale_factor)
+    minLineLength = int(150*scale_factor)
+    maxLineGap = int(800*scale_factor)
+    lineCandidates = cv2.HoughLinesP(xs.astype(np.uint8),
+                        rho=rho,
+                        theta=theta,
+                        threshold=threshold,
+                        minLineLength=minLineLength,
+                        maxLineGap=maxLineGap,
+                    )
+
+    bottom_left_point = points[3]
+    bottom_right_point = points[2]
+    line_left_best_error = 2*image_width_scaled
+    line_right_best_error = 2*image_width_scaled
+    print(f"tl: {points[0].x():5.0f}, {points[0].y():5.0f}, tr: {points[1].x():5.0f}, {points[1].y():5.0f}")
+    print(f"bl: {points[3].x():5.0f}, {points[3].y():5.0f}, br: {points[2].x():5.0f}, {points[2].y():5.0f}")
+    if lineCandidates is not None: # there were some lines found
+        for line in lineCandidates:
+            l = line[0]
+
+            slope = (l[1]-l[3]) / (l[0]-l[2]+1e-6) 
+            b = l[1] - l[0]*slope
+            x_loc_top = (0 - b) /  (slope + 1e-6)
+            x_loc_bot = (xs.shape[0]-1 - b) / (slope + 1e-6)
+            angle = np.arctan(1/(slope+1e-6)) # note this is rotated 90 degrees to keep the angles centered on 0 to make filtering easier
+            if abs(angle) > 3*np.pi/180:
+                continue
+
+            # make sure line passes through the top left point
+            x_predicted = (points[0].y() - b)/(slope+1e-6)
+            dx = x_predicted - points[0].x()
+            if abs(dx) < line_left_best_error:
+                line_left_best_error = abs(dx)
+                points[3] = QtCore.QPoint((points[3].y()-b)/(slope+1e-6), points[3].y())
+                print(f"Updated bl to {points[3].x():.0f}, {points[3].y():.0f}, with predicted tl x of {x_predicted:.1f} and error of {dx:.1f}")
+                
+            # make sure line passes through the top right point
+            x_predicted = (points[1].y() - b)/(slope+1e-6)
+            dx = x_predicted - points[1].x()
+            print(f"br error of {dx:.1f}")
+            if abs(dx) < line_right_best_error:
+                line_right_best_error = abs(dx)
+                points[2] = QtCore.QPoint((points[2].y()-b)/(slope+1e-6), points[2].y())
+                print(f"Updated br to {points[2].x():.0f}, {points[2].y():.0f}, with predicted tr x of {x_predicted:.1f} and error of {dx:.1f}")
+
+    application.setDirty()
+    application.setClean()
+    application.canvas.setEnabled(True)
+    #return points
 

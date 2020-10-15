@@ -34,7 +34,7 @@ from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import ZoomWidget
 
-from .utils import adjust_edges, adjust_edges_correlation, adjust_edges_local_sobel, adjust_edges_lines
+from .utils import adjust_edges, adjust_edges_correlation, adjust_edges_local_sobel, adjust_edges_lines, adjust_edges_pass_through_top_points
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -202,6 +202,9 @@ class MainWindow(QtWidgets.QMainWindow):
         hotkey.point_to_modify = 3;hotkey.modify_by = -modify_by
         hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('3'), self, self.move_point)
         hotkey.point_to_modify = 3;hotkey.modify_by = modify_by
+
+        # hotkey to run the adjustment algorithm on the bottom points based on the top points
+        hotkey = QtWidgets.QShortcut(QtGui.QKeySequence('g'), self, lambda: adjust_edges_pass_through_top_points(self))
 
         # tracking of the average manual adjustment
         self.current_adjustment = [0,0,0,0]
@@ -776,6 +779,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.status("Submitting label {:>5.0f}/{:<5.0f}...".format(idx,label_count))
             try:
                 self.imageHandler.submit_label_file(fname)
+            except KeyboardInterrupt:
+                print(f"\nCaught keyboard interrupt, exiting submitting without saving!")
+                return
             except:
                 exc = sys.exc_info()
                 errors[fname] = [str(exc[0]),str(exc[1])]
@@ -792,7 +798,7 @@ class MainWindow(QtWidgets.QMainWindow):
             for key in errors:
                 print(f"\t{key}: {str(errors[key][0])}")
             with open(error_log_fname,'w') as fp:
-                json.dump(errors,fp)
+                json.dump(errors,fp,indent=1)
         print(f"Finished uploading labels in {time.time() - start_time:.1f}seconds")
         self.status("Finished submitting {:.0f} labels to server".format(label_count))
 
@@ -1478,10 +1484,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 for shape in self.labelList.shapes:
                     if shape.label == self._config['auto_detect_edges_from_previous_label']:
                         try:
-                            #shape.points = adjust_edges(image,shape.points)
+                            shape.points = adjust_edges(image,shape.points)
                             #shape.points = adjust_edges_correlation(image,self.image_previous,shape.points,max_delta=0.01)
                             #shape.points = adjust_edges_local_sobel(image,self.image_previous,shape.points,max_delta=0.01)
-                            shape.points = adjust_edges_lines(image, shape.points)
+                            #shape.points = adjust_edges_lines(image, shape.points)
                             self.setDirty()
                         except Exception as e:
                             print("Not able to adjust the bounding box!")
